@@ -1,0 +1,618 @@
+#ifndef BTREE_TEM
+#define BTREE_TEM
+
+template <typename T>
+btree<T>::btree(size_t maxNodeElems):
+    maxNode{maxNodeElems},
+    root{std::make_shared<typename btree<T>::Node> (Node(maxNode))},
+    head_node{root},
+    tail_node{root},
+    tree_is_changed{true}
+{
+
+};
+
+
+//copy constructor of btree
+template<typename T>
+btree<T>::btree(const btree<T> & rhs):
+    maxNode{rhs.maxNode},
+    root{rhs.root},
+    head_node{rhs.head_node},
+    tail_node{rhs.tail_node},
+    tree_is_changed{true}
+
+{
+//    auto temp_node = *(rhs.root);
+//    *root = temp_node;
+};
+
+// move constructor of btree
+template <typename T>
+btree<T>::btree(btree<T> && rhs)noexcept :
+    maxNode{rhs.maxNode},
+    root{std::move(rhs.root)},
+    head_node{root},
+    tail_node{root},
+    tree_is_changed{true}
+{
+    rhs.maxNode = 0;
+    rhs.root = nullptr;
+    rhs.head_node = nullptr;
+    rhs.tail_node = nullptr;
+    rhs.tree_is_changed = true;
+
+};
+
+// copy assignment of btree
+
+template <typename T>
+btree<T>& btree<T>::operator=(const btree<T> &rhs) {
+    if (*root != *(rhs.root)) {
+        maxNode = rhs.maxNode;
+        root = rhs.root;
+        tree_is_changed = true;
+    }
+
+    return *this;
+};
+
+//move assignment of btree
+
+template <typename T>
+btree<T>& btree<T>::operator=(btree<T> &&rhs)noexcept
+{
+    if(*root != *(rhs.root)){
+        maxNode = rhs.maxNode;
+        root = std::move(rhs.root);
+        tree_is_changed = true;
+
+        rhs.maxNode = 0 ;
+        rhs.root = nullptr;
+        rhs.head_node = nullptr;
+        rhs.tail_node= nullptr;
+        rhs.tree_is_changed = true;
+    }
+
+    return *this;
+};
+
+template<typename T>
+std::ostream& operator<< (std::ostream &os, const btree<T> &tree)
+{
+    std::queue<std::shared_ptr<typename btree<T>::Node>> out_queue;
+    out_queue.push(tree.root);
+    while(!out_queue.empty()){
+        for(auto it = out_queue.front()->elements.cbegin(); it != out_queue.front()->elements.cend(); ++it){
+            os<< (*it) <<" ";
+        }
+        for(const auto & suc: out_queue.front()->successors){
+            if(suc != nullptr){
+                out_queue.push(suc);
+            }
+        }
+
+        out_queue.pop();
+    }
+
+    return os;
+
+};
+
+
+// here what the update do is updating the head node and tail node to the right position
+template <typename T>
+typename btree<T>::iterator btree<T>::begin() const
+{
+    update();
+    iterator a (head_node,0,tail_node);
+    return a;
+};
+
+
+template <typename T>
+typename btree<T>::iterator btree<T>::end() const
+{
+    update();
+    iterator b(nullptr,0,tail_node);
+    return b;
+};
+
+
+template<typename T> typename btree<T>::reverse_iterator
+btree<T>::rbegin() const {
+    return reverse_iterator(end());
+};
+
+template<typename T> typename btree<T>::reverse_iterator
+btree<T>::rend() const {
+    return reverse_iterator(begin());
+};
+
+template<typename T> typename btree<T>::const_iterator
+btree<T>::cbegin() const {
+    return const_iterator(begin());
+};
+
+template<typename T> typename btree<T>::const_iterator
+btree<T>::cend() const {
+    return const_iterator(end());
+};
+
+template<typename T> typename btree<T>::const_reverse_iterator
+btree<T>::crbegin() const {
+    return const_reverse_iterator(end());
+};
+
+template<typename T> typename btree<T>::const_reverse_iterator
+btree<T>::crend() const {
+    return const_reverse_iterator(begin());
+};
+
+template<typename  T>
+typename btree<T>::iterator btree<T>::find(const T &elem)
+{
+    update();
+    iterator answer(nullptr,0,tail_node);
+    // if root is not  full
+    if(root->elements.size() < maxNode){
+        for(size_t i=0; i< root->elements.size(); ++i){
+            if(elem == root->elements[i]){
+                return iterator(root,i,tail_node);
+            }
+        }
+
+        return iterator(nullptr,0,tail_node);
+    }
+    else{
+
+        // if root is full , four possible conditions
+        // less than the most left, bigger than the most right
+        // within the elements vector ,  or go to the successors
+        if(elem < root->elements[0]){
+            return help_find1(root->successors[0],elem);
+        }
+        else if (root->elements[maxNode - 1] < elem){
+            auto a =  help_find1(root->successors[maxNode],elem);
+            return a;
+        }
+
+        else{
+            for(size_t i =0;i< root->elements.size() ; ++i){
+                if(elem == root->elements[i]){
+                    return iterator(root,i,tail_node);
+                }
+                else{
+                    if((root->elements[i] < elem ) && (elem < root->elements[i + 1]))
+                    {
+                        // recursion here
+                        return help_find1(root->successors[i + 1],elem);
+                    }
+                }
+
+            }
+        }
+
+    }
+    return answer;
+};
+
+template  <typename T>
+typename btree<T>::const_iterator btree<T>::find(const T &elem) const
+{
+    update();
+    iterator answer(nullptr,0,tail_node);
+    if(root->elements.size() < maxNode){
+        for(size_t i=0; i< root->elements.size(); ++i){
+            if(elem == root->elements[i]){
+                return const_iterator(root,i,tail_node);
+            }
+        }
+
+        return const_iterator(nullptr,0,tail_node);
+    }
+    else{
+        if(elem < root->elements[0]){
+            return help_find2(root->successors[0],elem);
+        }
+        else if (root->elements[maxNode - 1] < elem){
+            return help_find2(root->successors[maxNode],elem);
+        }
+
+        else{
+            for(size_t i =0;i< root->elements.size() ; ++i){
+                if(elem == root->elements[i]){
+                    return const_iterator(root,i,tail_node);
+                }
+                else{
+                    if((root->elements[i] < elem ) && (elem < root->elements[i + 1]))
+                    {
+                        return help_find2(root->successors[i + 1],elem);
+                    }
+                }
+
+            }
+        }
+
+    }
+    return answer;
+
+};
+
+//inserting element into the tree
+template <typename T>
+std::pair<typename btree<T>::iterator,bool> btree<T>::insert(const T &elem)
+{
+    update();
+    auto answer = std::make_pair<typename btree<T>::iterator,bool> (iterator(nullptr,0,nullptr),false);
+// if the root is full
+    if(root->elements.size() < maxNode){
+// check whether the element is an element of the root
+        auto it = std::find(root->elements.begin(), root->elements.end(), elem);
+        //if so , return pair
+        if(it != root->elements.end()){
+            return std::make_pair<typename btree<T>::iterator,bool>(find(elem),false);
+        }
+
+            // else , adding elements and return
+        else
+	{
+            root->elements.push_back(elem);
+            std::sort(root->elements.begin(), root->elements.end(),[](const T& lhs, const T& rhs) {return lhs < rhs;});
+            tree_is_changed = true;
+            it = std::find(root->elements.begin(), root->elements.end(), elem);
+            size_t gap = static_cast<size_t >(std::distance(root->elements.begin(),it));
+            return std::make_pair<typename btree<T>::iterator,bool>(iterator(root,gap,tail_node), true );
+        }
+
+    }
+    else{
+        if(elem < root->elements[0]){
+            tree_is_changed = true;
+            return help_insert(root,0,elem);
+        }
+        else if(root->elements[maxNode - 1] < elem){
+            tree_is_changed = true;
+            return help_insert(root,maxNode,elem);
+        }
+        else{
+            for(size_t i=0; i< root->elements.size(); ++ i){
+                if(elem == root->elements[i]){
+                    return std::make_pair<typename btree<T>::iterator,bool>(find(elem),false);
+                }
+                else{
+                    if(root->elements[i] < elem && elem < root->elements[i + 1]){
+                        tree_is_changed = true;
+                        return help_insert(root,i + 1, elem);
+                    }
+                }
+            }
+        }
+    }
+    return answer;
+};
+
+
+
+
+// constructor of Node
+template<typename T>
+btree<T>::Node::Node(size_t maxNodeElems):
+        maxNode{maxNodeElems},
+        elements{std::vector<T> {}},
+        successors{std::vector<std::shared_ptr<typename btree::Node>> (maxNodeElems + 1,nullptr)},
+        father{nullptr}
+{};
+
+
+// copy constructor of Node,  deep copy
+template<typename T>
+btree<T>::Node::Node(const typename btree<T>::Node& rhs):
+        maxNode{rhs.maxNode},
+        elements{rhs.elements},
+        successors{std::vector<std::shared_ptr<typename btree::Node>> {}},
+        father{nullptr}
+{
+    if(rhs.have_successors()){
+        /*
+         * Here is a very big problem, I do not know how to make this as a smart pointer properaly
+         * which cause my btree can not implement a deep copy
+         *
+         * I tried lots of ways here , even get one day delay
+         * but finally I gived up
+         *
+         * I feel very depressed for this ..........
+         */
+        auto current_father = std::make_shared<typename  btree<T>::Node>(*this );
+        for(size_t i = 0;i< maxNode + 1; ++i){
+
+            if(rhs.successors[i] != nullptr){
+                Node tempNode{*(rhs.successors[i])};
+                tempNode.father = current_father;
+                std::shared_ptr<typename btree<T>::Node> tempPtr = std::make_shared<typename btree<T>::Node>(tempNode);
+
+                successors[i] = tempPtr;
+            }
+            else{
+                successors[i] = nullptr;
+            }
+        }
+    }
+};
+
+// move constructor of Node
+template<typename T>
+btree<T>::Node::Node(Node &&rhs) noexcept :
+    maxNode{rhs.maxNode},
+    elements{std::move(rhs.elements)},
+    successors{std::move(rhs.successors)},
+    father{std::move(rhs.father)}
+{
+    rhs.maxNode = 0;
+    rhs.elements.clear();
+    rhs.successors.clear();
+    rhs.father = nullptr;
+
+}
+template<typename T>
+typename btree<T>::Node& btree<T>::Node::operator=(const Node &rhs) {
+    if (!(*this == rhs))
+    {
+        elements = rhs.elements;
+        std::shared_ptr<typename btree<T>::Node> current_father = std::make_shared<typename btree<T>::Node>(this);
+        for (size_t i = 0; i < maxNode + 1; ++i) {
+            if (rhs.successors[i] != nullptr) {
+                Node tempNode{*(rhs.successors[i])};
+                tempNode.father = current_father;
+                std::shared_ptr<typename btree<T>::Node> tempPtr = std::make_shared<typename btree<T>::Node>(tempNode);
+
+                successors[i] = tempPtr;
+            }
+            else {
+                successors[i] = nullptr;
+            }
+        }
+
+    }
+    return *this;
+};
+
+template<typename T>
+typename btree<T>::Node& btree<T>::Node::operator=(Node &&rhs)noexcept
+{
+    if(!(*this == rhs)){
+
+
+
+        maxNode = rhs.maxNode;
+        elements = std::move(rhs.elements);
+        successors = std::move(rhs.successors);
+        father = std::move(rhs.father);
+
+        rhs.maxNode = 0;
+        rhs.elements.clear();
+        rhs.successors.clear();
+        rhs.father = nullptr;
+    }
+
+    return *this;
+};
+
+template<typename T>
+bool btree<T>::Node::have_successors() const
+{
+    auto suc = std::find_if(successors.cbegin(),successors.cend(),[](const std::shared_ptr<typename btree<T>::Node> &ptr)
+    {return ptr != nullptr;});
+
+    return suc!=successors.cend();
+
+}
+
+template<typename T>
+bool btree<T>::Node::operator==(const Node &rhs) const
+{
+    if(elements.size() != rhs.elements.size()){
+        return false;
+    }
+    else
+    {
+        for(size_t i=0;i< elements.size(); ++i){
+            if(elements[i] < rhs.elements[i] || rhs.elements[i] < elements[i]){
+                return false;
+            }
+        }
+
+        for(size_t i=0; i< successors.size(); ++i){
+            if((successors[i] == nullptr) || (rhs.successors[i] == nullptr)){
+                if(successors[i] != rhs.successors[i]){
+                    return false ;
+                }
+            }
+
+            else{
+                if(*successors[i] !=  *(rhs.successors[i])){
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+}
+
+template <typename T>
+void btree<T>::update() const
+{
+    if(tree_is_changed){
+        std::shared_ptr<typename btree<T>::Node> temp = root;
+        while(temp ->successors[0] != nullptr){
+            temp = temp->successors[0];
+        }
+
+        head_node =temp;
+
+        std::shared_ptr<typename btree<T>::Node> temp2 = root;
+        while(temp2 ->successors[maxNode] != nullptr){
+            temp2 = temp2->successors[maxNode];
+        }
+
+        tail_node =temp2;
+        tree_is_changed = false;
+
+    }
+
+
+}
+
+//TODO:: updating the gettail function
+
+
+
+template <typename T>
+typename btree<T>::iterator btree<T>::help_find1(std::shared_ptr<typename btree<T>::Node> node,  const T& eleme)
+{
+    update();
+    iterator answer(nullptr,0,tail_node);
+    if(node == nullptr){
+        return iterator(nullptr,0,tail_node);
+    }
+    else{
+        if(node ->elements.size() < maxNode){
+            auto it = std::find(node->elements.begin(), node->elements.end(),eleme);
+            if(it != node->elements.end()){
+                return iterator(node, static_cast<size_t > (it - node->elements.begin()),tail_node);
+            }
+
+            return iterator(nullptr,0,tail_node);
+        }
+
+        else{
+            if(eleme < node->elements[0]){
+                return help_find1(node->successors[0],eleme);
+            }
+            else if(node->elements[maxNode - 1] < eleme){
+                return help_find1(node->successors[maxNode],eleme);
+            }
+            else{
+                for(size_t i=0;i< maxNode;++i){
+                    if(eleme == node->elements[i]){
+                        return iterator(node,i,tail_node);
+                    }
+                    else if(node->elements[i] < eleme && eleme < node->elements[i+1]){
+                        return help_find1(node->successors[i + 1],eleme);
+                    }
+                }
+            }
+        }
+    }
+    return answer;
+};
+
+template <typename T>
+typename btree<T>::const_iterator btree<T>::help_find2(std::shared_ptr<typename btree<T>::Node> node,  const T& eleme) const
+{
+    update();
+    iterator answer(nullptr,0,tail_node);
+    if(node == nullptr){
+        return const_iterator(nullptr,0,tail_node);
+    }
+    else{
+        if(node ->elements.size() < maxNode){
+            auto it = std::find(node->elements.begin(), node->elements.end(),eleme);
+            if(it != node->elements.end()){
+                return const_iterator(node, static_cast<size_t > (it - node->elements.begin()), tail_node);
+            }
+
+            return const_iterator(nullptr,0,tail_node);
+        }
+
+        else{
+            if(eleme < node->elements[0]){
+                return help_find2(node->successors[0],eleme);
+            }
+            else if(node->elements[maxNode - 1] < eleme){
+                return help_find2(node->successors[maxNode],eleme);
+            }
+            else{
+                for(size_t i=0;i< maxNode;++i){
+                    if(eleme == node->elements[i]){
+                        return const_iterator(node,i,tail_node);
+                    }
+                    else if(node->elements[i] < eleme && eleme < node->elements[i+1]){
+                        return help_find2(node->successors[i + 1],eleme);
+                    }
+                }
+            }
+        }
+    }
+    return answer;
+};
+
+template<typename T>
+std::pair<typename btree<T>::iterator,bool> btree<T>::help_insert(std::shared_ptr<typename btree<T>::Node> node,size_t  idx,const T& eleme)
+{
+    update();
+    // this answer is useless ,but without this there will be a warning
+    auto answer = std::make_pair<typename btree<T>::iterator,bool> (iterator(nullptr,0, nullptr),false);
+    if(node->successors[idx] == nullptr){
+        // if current node is nullptr
+        // create a new node and insert the value
+        auto newnode_ptr = std::make_shared<btree::Node>(Node(maxNode));
+        newnode_ptr->elements.push_back(eleme);
+        newnode_ptr->father = node;
+
+        node->successors[idx] = newnode_ptr;
+        tree_is_changed = true;
+
+        return std::make_pair<typename btree<T>::iterator,bool>(iterator(newnode_ptr,0,tail_node),true);
+    }
+
+    else{
+        std::shared_ptr<btree<T>::Node> temp_node_ptr = node->successors[idx];
+        if(temp_node_ptr->elements.size() < maxNode){
+            //if this node is not full
+            auto it = std::find(temp_node_ptr->elements.begin(), temp_node_ptr->elements.end(),eleme);
+            //check whether exists
+            if(it != temp_node_ptr->elements.cend()){
+                return std::make_pair<typename btree<T>::iterator,bool> (iterator(temp_node_ptr, static_cast<size_t > (it - temp_node_ptr->elements.begin()),tail_node),false);
+
+            }
+            else{
+                //if not exist , recursing checking
+                temp_node_ptr->elements.push_back(eleme);
+                std::sort(temp_node_ptr->elements.begin(),temp_node_ptr->elements.end(),[](const T& lhs,const T& rhs)
+                {return lhs < rhs;});
+
+                auto new_it = std::find(temp_node_ptr->elements.begin(), temp_node_ptr->elements.end(), eleme);
+                tree_is_changed = true;
+                return std::make_pair<typename btree<T>::iterator,bool> (iterator(temp_node_ptr, static_cast<size_t > (new_it - temp_node_ptr->elements.begin()),tail_node ),true);
+            }
+        }
+        else{
+            //if current node is full
+            if(eleme < temp_node_ptr->elements[0]){
+                return help_insert(temp_node_ptr,0,eleme);
+            }
+            else if(temp_node_ptr->elements[maxNode - 1] < eleme){
+                return help_insert(temp_node_ptr,maxNode,eleme);
+            }
+            else{
+                for(size_t i=0;i< temp_node_ptr->elements.size(); ++i){
+                    if(eleme == temp_node_ptr->elements[i]){
+                        return std::make_pair<typename btree<T>::iterator,bool> (iterator(temp_node_ptr,i,tail_node ),true);
+                    }
+                    else if(temp_node_ptr->elements[i] < eleme && eleme < temp_node_ptr->elements[i + 1]){
+                        return help_insert(temp_node_ptr,i + 1,eleme);
+                    }
+                }
+            }
+
+        }
+    }
+    return answer;
+};
+
+#endif
+
+
+
